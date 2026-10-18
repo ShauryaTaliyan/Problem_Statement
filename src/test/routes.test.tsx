@@ -92,4 +92,36 @@ describe('App Routing & Route Guards', () => {
     expect(await screen.findByText(/Club Permission Delegations/i)).toBeInTheDocument();
     expect(screen.getByText(/Delegate a Club Power/i)).toBeInTheDocument();
   });
+
+  it('renders Sign In page with Create account link and Quick Test Persona in demo mode', async () => {
+    render(
+      <AuthProvider>
+        <MemoryRouter initialEntries={['/sign-in']}>
+          <App />
+        </MemoryRouter>
+      </AuthProvider>
+    );
+
+    expect(await screen.findByText(/MSOT Clubs Sign In/i)).toBeInTheDocument();
+    expect(screen.getByText(/Create account/i)).toBeInTheDocument();
+    expect(screen.getByText(/Quick Test Persona/i)).toBeInTheDocument();
+  });
+
+  it('renders Sign Up registration form on "/sign-up"', async () => {
+    render(
+      <AuthProvider>
+        <MemoryRouter initialEntries={['/sign-up']}>
+          <App />
+        </MemoryRouter>
+      </AuthProvider>
+    );
+
+    expect(await screen.findByText(/Create Student Account/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Full Name/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Institutional Email Address/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^Password/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Confirm Password/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Create Account/i })).toBeInTheDocument();
+    expect(screen.getByText(/Already have an account\?/i)).toBeInTheDocument();
+  });
 });

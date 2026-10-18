@@ -16,6 +16,16 @@ interface AuthContextType {
   configMessage: string | null;
   switchDemoRole: (role: UserRole) => void;
   signIn: (email: string, pass: string) => Promise<{ error: Error | null }>;
+  signUp: (
+    fullName: string,
+    email: string,
+    pass: string
+  ) => Promise<{
+    user: import('@supabase/supabase-js').User | null;
+    session: import('@supabase/supabase-js').Session | null;
+    needsEmailConfirmation: boolean;
+    error: Error | null;
+  }>;
   signOut: () => Promise<void>;
 }
 
@@ -241,6 +251,85 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { error };
   };
 
+  const signUp = async (
+    fullName: string,
+    email: string,
+    pass: string
+  ): Promise<{
+    user: import('@supabase/supabase-js').User | null;
+    session: import('@supabase/supabase-js').Session | null;
+    needsEmailConfirmation: boolean;
+    error: Error | null;
+  }> => {
+    if (!isSupabaseConfigured()) {
+      return {
+        user: null,
+        session: null,
+        needsEmailConfirmation: false,
+        error: new Error(
+          'Supabase credentials are not configured in .env.local. Live backend connection is required to create a new account.'
+        ),
+      };
+    }
+
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password: pass,
+      options: {
+        data: {
+          full_name: fullName,
+        },
+      },
+    });
+
+    if (error) {
+      return {
+        user: null,
+        session: null,
+        needsEmailConfirmation: false,
+        error,
+      };
+    }
+
+    const createdUser = data.user;
+    const session = data.session;
+    const needsEmailConfirmation = !session;
+
+    // Check database profile creation flow:
+    // If a session was immediately established, check if a profile already exists
+    // (e.g. created by a database trigger on auth.users).
+    // Avoid creating duplicate profiles if a trigger already handles this!
+    if (session && createdUser) {
+      try {
+        const { data: existingProfile } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('id', createdUser.id)
+          .maybeSingle();
+
+        if (!existingProfile) {
+          type ProfileInsert = import('../types/database').Database['public']['Tables']['profiles']['Insert'];
+          const profilePayload: ProfileInsert = {
+            id: createdUser.id,
+            full_name: fullName,
+            email: createdUser.email || email,
+          };
+          await (supabase.from('profiles') as unknown as { insert: (row: ProfileInsert) => Promise<unknown> }).insert(profilePayload);
+        }
+      } catch (profileErr) {
+        // Ignored or logged if already handled concurrently by trigger
+        console.warn('Profile initialization note:', profileErr);
+      }
+    }
+
+    return {
+      user: createdUser,
+      session,
+      needsEmailConfirmation,
+      error: null,
+    };
+  };
+
   const signOut = async () => {
     if (isSupabaseConfigured()) {
       await supabase.auth.signOut();
@@ -259,6 +348,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         configMessage: status.missingMessage,
         switchDemoRole,
         signIn,
+        signUp,
         signOut,
       }}
     >

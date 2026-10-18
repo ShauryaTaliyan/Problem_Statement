@@ -10,6 +10,7 @@ import { ProtectedRoute } from './components/auth/ProtectedRoute';
 // Pages
 import { Home } from './pages/Home';
 import { SignIn } from './pages/SignIn';
+import { SignUp } from './pages/SignUp';
 import { Clubs } from './pages/Clubs';
 import { ClubDetail } from './pages/ClubDetail';
 import { Events } from './pages/Events';
@@ -31,6 +32,7 @@ export const App: React.FC = () => {
         <Route path="events" element={<Events />} />
         <Route path="calendar" element={<Calendar />} />
         <Route path="sign-in" element={<SignIn />} />
+        <Route path="sign-up" element={<SignUp />} />
 
         {/* Authenticated Student Routes */}
         <Route

@@ -3,7 +3,7 @@
 // ============================================================================
 
 import React, { useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { GlassCard } from '../components/ui/GlassCard';
 import { GlassButton } from '../components/ui/GlassButton';
@@ -14,7 +14,7 @@ import { UserRole } from '../types/auth';
 import { Sparkles, LogIn } from 'lucide-react';
 
 export const SignIn: React.FC = () => {
-  const { signIn, switchDemoRole } = useAuth();
+  const { signIn, switchDemoRole, isDemoMode } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -183,87 +183,111 @@ export const SignIn: React.FC = () => {
             </GlassButton>
           </form>
 
-          {/* Quick Persona Selector for Testing */}
+          {/* Create Account Link */}
           <div
             style={{
-              marginTop: '1.75rem',
-              paddingTop: '1.25rem',
-              borderTop: '1px solid var(--border-glass-light)',
+              marginTop: '1.25rem',
+              textAlign: 'center',
+              fontSize: '0.875rem',
+              color: 'var(--text-navy-secondary)',
             }}
           >
-            <div
+            Don&apos;t have an account?{' '}
+            <Link
+              to="/sign-up"
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                marginBottom: '0.75rem',
+                fontWeight: 700,
+                color: 'var(--color-blue-700)',
+                textDecoration: 'none',
               }}
             >
-              <span
+              Create account
+            </Link>
+          </div>
+
+          {/* Quick Persona Selector for Testing (Only in unconfigured Dev/Demo mode) */}
+          {isDemoMode && (
+            <div
+              style={{
+                marginTop: '1.75rem',
+                paddingTop: '1.25rem',
+                borderTop: '1px solid var(--border-glass-light)',
+              }}
+            >
+              <div
                 style={{
-                  fontSize: '0.75rem',
-                  fontWeight: 700,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.04em',
-                  color: 'var(--text-navy-muted)',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '0.35rem',
+                  justifyContent: 'space-between',
+                  marginBottom: '0.75rem',
                 }}
               >
-                <Sparkles size={14} color="var(--color-cyan-600)" />
-                Quick Test Persona
-              </span>
-              <Badge variant="cyan" size="sm">
-                Dev Mode
-              </Badge>
-            </div>
+                <span
+                  style={{
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.04em',
+                    color: 'var(--text-navy-muted)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.35rem',
+                  }}
+                >
+                  <Sparkles size={14} color="var(--color-cyan-600)" />
+                  Quick Test Persona
+                </span>
+                <Badge variant="cyan" size="sm">
+                  Dev Mode
+                </Badge>
+              </div>
 
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(2, 1fr)',
-                gap: '0.5rem',
-              }}
-            >
-              {(['student', 'coordinator', 'president', 'advisor', 'campus_manager', 'admin'] as UserRole[]).map(
-                (role) => {
-                  const p = DEMO_PROFILES[role];
-                  return (
-                    <button
-                      key={role}
-                      type="button"
-                      onClick={() => handleQuickDemoSelect(role)}
-                      style={{
-                        padding: '0.5rem',
-                        borderRadius: 'var(--radius-sm)',
-                        backgroundColor: 'rgba(255, 255, 255, 0.8)',
-                        border: '1px solid var(--border-glass-light)',
-                        textAlign: 'left',
-                        cursor: 'pointer',
-                        transition: 'all 0.15s ease',
-                      }}
-                    >
-                      <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-blue-700)' }}>
-                        {role.replace('_', ' ')}
-                      </div>
-                      <div
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(2, 1fr)',
+                  gap: '0.5rem',
+                }}
+              >
+                {(['student', 'coordinator', 'president', 'advisor', 'campus_manager', 'admin'] as UserRole[]).map(
+                  (role) => {
+                    const p = DEMO_PROFILES[role];
+                    return (
+                      <button
+                        key={role}
+                        type="button"
+                        onClick={() => handleQuickDemoSelect(role)}
                         style={{
-                          fontSize: '0.7rem',
-                          color: 'var(--text-navy-muted)',
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
+                          padding: '0.5rem',
+                          borderRadius: 'var(--radius-sm)',
+                          backgroundColor: 'rgba(255, 255, 255, 0.8)',
+                          border: '1px solid var(--border-glass-light)',
+                          textAlign: 'left',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease',
                         }}
                       >
-                        {p.fullName.split(' ')[0]}
-                      </div>
-                    </button>
-                  );
-                }
-              )}
+                        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-blue-700)' }}>
+                          {role.replace('_', ' ')}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: '0.7rem',
+                            color: 'var(--text-navy-muted)',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                          }}
+                        >
+                          {p.fullName.split(' ')[0]}
+                        </div>
+                      </button>
+                    );
+                  }
+                )}
+              </div>
             </div>
-          </div>
+          )}
         </GlassCard>
       </div>
     </div>
