@@ -154,3 +154,164 @@ export function validatePresidentAppointment(
   }
   return { valid: true };
 }
+
+/**
+ * Validates updates to coordinator applications.
+ * Rule: Applicants cannot modify reviewer metadata or approve themselves.
+ */
+export function validateApplicationUpdate(
+  actor: UserProfile,
+  application: { id: string; clubId: string; userId: string; status: string },
+  updates: {
+    reviewerId?: string;
+    reviewerComment?: string;
+    reviewedAt?: string;
+    status?: string;
+  }
+): { valid: boolean; error?: string } {
+  const isOwner = actor.id === application.userId;
+  const isReviewer =
+    actor.roles.includes('admin') ||
+    isClubPresident(actor, application.clubId) ||
+    hasClubPermission(actor, application.clubId, 'review_applications');
+
+  // If applicant is updating their own application
+  if (isOwner && !isReviewer) {
+    if (
+      updates.reviewerId !== undefined ||
+      updates.reviewerComment !== undefined ||
+      updates.reviewedAt !== undefined
+    ) {
+      return {
+        valid: false,
+        error: 'Unauthorized: Applicants cannot modify review fields.',
+      };
+    }
+    if (updates.status && updates.status !== application.status) {
+      if (application.status !== 'pending' || updates.status !== 'withdrawn') {
+        return {
+          valid: false,
+          error: 'Unauthorized: Applicants may only withdraw pending applications.',
+        };
+      }
+    }
+    return { valid: true };
+  }
+
+  // If non-reviewer and non-owner
+  if (!isReviewer) {
+    return {
+      valid: false,
+      error: 'Unauthorized: Only authorized reviewers or administrators can review applications.',
+    };
+  }
+
+  // Conflict of interest: reviewer cannot review their own application unless admin
+  if (isOwner && !actor.roles.includes('admin')) {
+    return {
+      valid: false,
+      error: 'Conflict of interest: You cannot review or approve your own application.',
+    };
+  }
+
+  return { valid: true };
+}
+
+/**
+ * Validates that club membership creation has an approved application prerequisite.
+ */
+export function validateMembershipCreation(
+  actor: UserProfile,
+  hasApprovedApplication: boolean
+): { valid: boolean; error?: string } {
+  if (actor.roles.includes('admin')) {
+    return { valid: true };
+  }
+
+  if (!hasApprovedApplication) {
+    return {
+      valid: false,
+      error: 'Database Invariant Violated: A club coordinator membership can only be created after an approved application exists for this club.',
+    };
+  }
+
+  return { valid: true };
+}
+
+/**
+ * Validates updates to club attributes to prevent coordinators from modifying protected fields.
+ */
+export function validateClubFieldUpdate(
+  actor: UserProfile,
+  club: { campusId: string; status: string; facultyAdvisorId?: string; code: string },
+  updates: {
+    campusId?: string;
+    status?: string;
+    facultyAdvisorId?: string;
+    code?: string;
+  }
+): { valid: boolean; error?: string } {
+  const isAdmin = actor.roles.includes('admin');
+  const isCampusManager =
+    actor.roles.includes('campus_manager') && actor.campusId === club.campusId;
+
+  if (!isAdmin && !isCampusManager) {
+    if (updates.campusId && updates.campusId !== club.campusId) {
+      return {
+        valid: false,
+        error: 'Unauthorized: Coordinators cannot change the campus assignment of a club.',
+      };
+    }
+    if (updates.status && updates.status !== club.status) {
+      return {
+        valid: false,
+        error: 'Unauthorized: Coordinators cannot change the status of a club.',
+      };
+    }
+    if (updates.facultyAdvisorId && updates.facultyAdvisorId !== club.facultyAdvisorId) {
+      return {
+        valid: false,
+        error: 'Unauthorized: Coordinators cannot reassign the faculty advisor.',
+      };
+    }
+    if (updates.code && updates.code !== club.code) {
+      return {
+        valid: false,
+        error: 'Unauthorized: Club code is immutable.',
+      };
+    }
+  }
+
+  return { valid: true };
+}
+
+/**
+ * Validates presidential succession transaction.
+ */
+export function validatePresidentialSuccession(
+  actor: UserProfile,
+  candidate: UserProfile,
+  clubId: string,
+  clubCampusId: string
+): { valid: boolean; error?: string } {
+  const isAdmin = actor.roles.includes('admin');
+  const isCampusManager =
+    actor.roles.includes('campus_manager') && actor.campusId === clubCampusId;
+
+  if (!isAdmin && !isCampusManager) {
+    return {
+      valid: false,
+      error: 'Unauthorized: Only Campus Managers or Admins can appoint or transition a Club President.',
+    };
+  }
+
+  if (!isClubCoordinator(candidate, clubId)) {
+    return {
+      valid: false,
+      error: 'A Club President must be an active approved Student Coordinator of the same club.',
+    };
+  }
+
+  return { valid: true };
+}
+

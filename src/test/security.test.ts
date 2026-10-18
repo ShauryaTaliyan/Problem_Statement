@@ -3,11 +3,17 @@
 // ============================================================================
 
 import { describe, it, expect } from 'vitest';
+import fs from 'node:fs';
+import path from 'node:path';
 import {
   hasClubPermission,
   isClubPresident,
   isClubCoordinator,
   validateDelegationAttempt,
+  validateApplicationUpdate,
+  validateMembershipCreation,
+  validateClubFieldUpdate,
+  validatePresidentialSuccession,
 } from '../lib/permissions';
 import { DEMO_PROFILES, DEMO_CLUBS } from '../lib/demoData';
 import { UserProfile } from '../types/auth';
@@ -183,4 +189,190 @@ describe('Security Fixes & Invariant Hardening', () => {
     expect(isDuplicatePendingApp(codingClubId, DEMO_PROFILES.student.id)).toBe(true);
     expect(isDuplicatePendingApp(DEMO_CLUBS[1].id, DEMO_PROFILES.student.id)).toBe(false);
   });
+
+  // --------------------------------------------------------------------------
+  // Fix 7: Safe fixed search_path on all SECURITY DEFINER functions
+  // --------------------------------------------------------------------------
+  it('Fix 7: Migration 000004 defines search_path = public, pg_temp on all SECURITY DEFINER functions', () => {
+    const migrationPath = path.resolve(
+      __dirname,
+      '../../supabase/migrations/20261018000004_p0_hardening_and_succession.sql'
+    );
+    expect(fs.existsSync(migrationPath)).toBe(true);
+
+    const migrationContent = fs.readFileSync(migrationPath, 'utf8');
+    // Match non-commented SECURITY DEFINER clauses
+    const secDefinerMatches = migrationContent.match(/^\s*SECURITY DEFINER/gm) || [];
+    const searchPathMatches = migrationContent.match(/^\s*SET search_path = public, pg_temp/gm) || [];
+
+    expect(secDefinerMatches.length).toBeGreaterThan(0);
+    // Every SECURITY DEFINER function in migration 000004 must have SET search_path = public, pg_temp
+    expect(searchPathMatches.length).toBe(secDefinerMatches.length);
+  });
+
+  // --------------------------------------------------------------------------
+  // Fix 8: Coordinator Application Tampering Prevention
+  // --------------------------------------------------------------------------
+  it('Fix 8: Applicants cannot tamper with review metadata or self-approve; only authorized reviewers/admins can review', () => {
+    const student = DEMO_PROFILES.student;
+    const president = DEMO_PROFILES.president;
+    const application = {
+      id: 'app-001',
+      clubId: codingClubId,
+      userId: student.id,
+      status: 'pending',
+    };
+
+    // 1. Applicant cannot self-approve
+    const selfApprove = validateApplicationUpdate(student, application, { status: 'approved' });
+    expect(selfApprove.valid).toBe(false);
+    expect(selfApprove.error).toContain('Applicants may only withdraw pending applications');
+
+    // 2. Applicant cannot forge reviewer metadata
+    const forgeReviewer = validateApplicationUpdate(student, application, {
+      reviewerId: student.id,
+      reviewerComment: 'Self-approved',
+    });
+    expect(forgeReviewer.valid).toBe(false);
+    expect(forgeReviewer.error).toContain('Applicants cannot modify review fields');
+
+    // 3. Applicant CAN withdraw pending application
+    const withdraw = validateApplicationUpdate(student, application, { status: 'withdrawn' });
+    expect(withdraw.valid).toBe(true);
+
+    // 4. Authorized President can approve
+    const presidentApprove = validateApplicationUpdate(president, application, {
+      status: 'approved',
+      reviewerComment: 'Strong candidate',
+    });
+    expect(presidentApprove.valid).toBe(true);
+
+    // 5. Reviewer cannot approve their own application (conflict of interest)
+    const presidentOwnApp = {
+      id: 'app-002',
+      clubId: codingClubId,
+      userId: president.id,
+      status: 'pending',
+    };
+    const conflictCheck = validateApplicationUpdate(president, presidentOwnApp, {
+      status: 'approved',
+    });
+    expect(conflictCheck.valid).toBe(false);
+    expect(conflictCheck.error).toContain('Conflict of interest');
+  });
+
+  // --------------------------------------------------------------------------
+  // Fix 9: Club Membership Requires Approved Coordinator Application
+  // --------------------------------------------------------------------------
+  it('Fix 9: Club membership creation requires an approved coordinator application at DB level', () => {
+    const president = DEMO_PROFILES.president;
+    const admin = DEMO_PROFILES.admin;
+
+    // Without approved application -> rejected
+    const withoutApp = validateMembershipCreation(president, false);
+    expect(withoutApp.valid).toBe(false);
+    expect(withoutApp.error).toContain('approved application exists for this club');
+
+    // With approved application -> valid
+    const withApp = validateMembershipCreation(president, true);
+    expect(withApp.valid).toBe(true);
+
+    // Admin override (e.g., initial system bootstrap) -> valid
+    const adminBypass = validateMembershipCreation(admin, false);
+    expect(adminBypass.valid).toBe(true);
+  });
+
+  // --------------------------------------------------------------------------
+  // Fix 10: Protection of Club Fields from Coordinator Tampering
+  // --------------------------------------------------------------------------
+  it('Fix 10: Coordinators cannot change protected club fields (campus_id, status, faculty_advisor_id, code)', () => {
+    const coordinator = DEMO_PROFILES.coordinator;
+    const campusManager = DEMO_PROFILES.campus_manager;
+    const club = DEMO_CLUBS[0];
+
+    // Coordinator attempting to change campusId -> rejected
+    const campusTamper = validateClubFieldUpdate(coordinator, club, {
+      campusId: 'different-campus-uuid',
+    });
+    expect(campusTamper.valid).toBe(false);
+    expect(campusTamper.error).toContain('cannot change the campus assignment');
+
+    // Coordinator attempting to change club status -> rejected
+    const statusTamper = validateClubFieldUpdate(coordinator, club, {
+      status: 'inactive',
+    });
+    expect(statusTamper.valid).toBe(false);
+    expect(statusTamper.error).toContain('cannot change the status of a club');
+
+    // Coordinator attempting to change faculty advisor -> rejected
+    const advisorTamper = validateClubFieldUpdate(coordinator, club, {
+      facultyAdvisorId: 'new-advisor-uuid',
+    });
+    expect(advisorTamper.valid).toBe(false);
+    expect(advisorTamper.error).toContain('cannot reassign the faculty advisor');
+
+    // Coordinator attempting to change immutable club code -> rejected
+    const codeTamper = validateClubFieldUpdate(coordinator, club, {
+      code: 'NEW-CODE-99',
+    });
+    expect(codeTamper.valid).toBe(false);
+    expect(codeTamper.error).toContain('Club code is immutable');
+
+    // Campus Manager CAN update status or advisor for their campus
+    const managerUpdate = validateClubFieldUpdate(campusManager, club, {
+      status: 'active',
+      facultyAdvisorId: 'new-advisor-uuid',
+    });
+    expect(managerUpdate.valid).toBe(true);
+  });
+
+  // --------------------------------------------------------------------------
+  // Fix 11: Presidential Succession Procedure
+  // --------------------------------------------------------------------------
+  it('Fix 11: Presidential succession safely enforces coordinator status and campus manager/admin authority', () => {
+    const student = DEMO_PROFILES.student;
+    const coordinator = DEMO_PROFILES.coordinator;
+    const campusManager = DEMO_PROFILES.campus_manager;
+    const admin = DEMO_PROFILES.admin;
+    const club = DEMO_CLUBS[0];
+
+    // 1. Regular coordinator cannot transition president
+    const unauthorizedActor = validatePresidentialSuccession(
+      coordinator,
+      coordinator,
+      club.id,
+      club.campusId
+    );
+    expect(unauthorizedActor.valid).toBe(false);
+    expect(unauthorizedActor.error).toContain('Only Campus Managers or Admins');
+
+    // 2. Candidate must be an approved coordinator (student is not)
+    const invalidCandidate = validatePresidentialSuccession(
+      campusManager,
+      student,
+      club.id,
+      club.campusId
+    );
+    expect(invalidCandidate.valid).toBe(false);
+    expect(invalidCandidate.error).toContain('must be an active approved Student Coordinator');
+
+    // 3. Valid succession by Campus Manager with active coordinator candidate
+    const validSuccessionManager = validatePresidentialSuccession(
+      campusManager,
+      coordinator,
+      club.id,
+      club.campusId
+    );
+    expect(validSuccessionManager.valid).toBe(true);
+
+    // 4. Valid succession by Admin
+    const validSuccessionAdmin = validatePresidentialSuccession(
+      admin,
+      coordinator,
+      club.id,
+      club.campusId
+    );
+    expect(validSuccessionAdmin.valid).toBe(true);
+  });
 });
+
