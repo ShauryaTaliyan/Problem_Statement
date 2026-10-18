@@ -7,10 +7,12 @@
 --   - Zero destructive operations (NO TRUNCATE, NO DELETE, NO CASCADE).
 --   - Does NOT touch profiles, user_roles, auth.users, applications,
 --     memberships, presidencies, delegations, or audit logs.
---   - Preserves existing faculty_advisor_id values on conflict (never overwrites
---     assigned advisors with NULL).
+--   - For clubs, strictly preserves existing campus_id, code, faculty_advisor_id,
+--     and status on conflict.
+--   - Updates only name, category, description, capacity, and updated_at on conflict,
+--     fully respecting all invariants enforced by trg_protect_club_fields.
 --   - Uses standard deterministic UUIDs consistent with application domain logic.
---   - Safe to rerun multiple times without duplicating rows or causing errors.
+--   - Safe to rerun multiple times without duplicating rows or causing trigger errors.
 -- ============================================================================
 
 -- ============================================================================
@@ -61,12 +63,14 @@ ON CONFLICT (id) DO UPDATE SET
 -- ============================================================================
 -- 2. Registered Student Clubs (4 Clubs)
 --
--- Notes:
---   - Initial insert sets faculty_advisor_id to NULL to avoid foreign key errors
---     against non-existent fictional profiles.
---   - ON CONFLICT DO UPDATE purposefully omits faculty_advisor_id, campus_id,
---     and code. This preserves existing advisor assignments and respects the
---     immutability checks enforced by trg_protect_club_fields.
+-- Safety and Invariant Rules:
+--   - On initial insert: faculty_advisor_id is set to NULL to avoid foreign key
+--     errors against non-existent fictional profiles.
+--   - On conflict: strictly preserves existing campus_id, code, faculty_advisor_id,
+--     and status.
+--   - On conflict: updates ONLY name, category, description, capacity, and updated_at.
+--     This guarantees that trg_protect_club_fields will never encounter unauthorized
+--     changes to protected fields on rerun.
 -- ============================================================================
 
 INSERT INTO public.clubs (
@@ -130,5 +134,4 @@ ON CONFLICT (id) DO UPDATE SET
     category = EXCLUDED.category,
     description = EXCLUDED.description,
     capacity = EXCLUDED.capacity,
-    status = EXCLUDED.status,
     updated_at = now();
