@@ -23,7 +23,8 @@ export const SignIn: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/';
+  const rawFrom = (location.state as { from?: { pathname: string } })?.from?.pathname;
+  const targetPath = rawFrom && rawFrom !== '/sign-in' && rawFrom !== '/sign-up' ? rawFrom : '/';
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -41,13 +42,13 @@ export const SignIn: React.FC = () => {
     if (error) {
       setErrorMessage(error.message);
     } else {
-      navigate(from, { replace: true });
+      navigate(targetPath, { replace: true });
     }
   };
 
   const handleQuickDemoSelect = (role: UserRole) => {
     switchDemoRole(role);
-    navigate(from, { replace: true });
+    navigate(targetPath, { replace: true });
   };
 
   return (

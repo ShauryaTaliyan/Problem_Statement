@@ -41,20 +41,71 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Load user profile from Supabase if live credentials exist
   const fetchLiveProfile = useCallback(async (userId: string) => {
+    setIsLoading(true);
     try {
-      // 1. Fetch Profile
+      // 1. Fetch Profile with maybeSingle() to prevent PGRST116 errors on missing rows
       const { data, error: profileErr } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
-        .single();
+        .maybeSingle();
 
-      const profileData = data as unknown as import('../types/database').Database['public']['Tables']['profiles']['Row'] | null;
+      let profileData = data as unknown as import('../types/database').Database['public']['Tables']['profiles']['Row'] | null;
 
+      // Profile recovery flow: Handle unseeded/newly registered users without profiles
       if (profileErr || !profileData) {
-        console.error('Error fetching profile:', profileErr);
-        setUser(null);
-        return;
+        console.warn('Profile record not found in public.profiles for user:', userId, profileErr?.message);
+
+        let authUser: import('@supabase/supabase-js').User | null = null;
+        try {
+          const { data: authUserData } = await supabase.auth.getUser();
+          authUser = authUserData?.user || null;
+        } catch {
+          // Ignore
+        }
+
+        const fullName = authUser?.user_metadata?.full_name || authUser?.email?.split('@')[0] || 'Student';
+        const userEmail = authUser?.email || '';
+
+        // Attempt to insert missing profile row into public.profiles
+        try {
+          type ProfileInsert = import('../types/database').Database['public']['Tables']['profiles']['Insert'];
+          const profilePayload: ProfileInsert = {
+            id: userId,
+            full_name: fullName,
+            email: userEmail,
+          };
+          await (supabase.from('profiles') as unknown as { insert: (row: ProfileInsert) => Promise<unknown> }).insert(profilePayload);
+
+          const { data: reloaded } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', userId)
+            .maybeSingle();
+
+          profileData = reloaded as unknown as typeof profileData;
+        } catch (insertErr) {
+          console.warn('Could not auto-insert profile into table:', insertErr);
+        }
+
+        // If database profile still could not be created/fetched (e.g. client insert blocked by RLS),
+        // provide a safe, resilient default student profile so the user is never stuck in limbo:
+        if (!profileData) {
+          const fallbackUser: UserProfile = {
+            id: userId,
+            fullName,
+            email: userEmail,
+            campusId: '',
+            campusName: 'MSOT Campus',
+            campusCode: 'MSOT',
+            roles: ['student'],
+            memberships: [],
+            createdAt: authUser?.created_at || new Date().toISOString(),
+          };
+          setUser(fallbackUser);
+          setCurrentRole('student');
+          return;
+        }
       }
 
       // 2. Fetch User Roles
@@ -64,7 +115,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .eq('user_id', userId);
 
       const rolesData = rawRoles as unknown as { role: UserRole }[] | null;
-      const roles = (rolesData?.map((r) => r.role) || ['student']);
+      const roles = (rolesData && rolesData.length > 0)
+        ? rolesData.map((r) => r.role)
+        : (['student'] as UserRole[]);
 
       // 3. Fetch Club Memberships & Delegations
       const { data: rawMembers } = await supabase
@@ -138,8 +191,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const loadedUser: UserProfile = {
         id: profileData.id,
         studentId: profileData.student_id || undefined,
-        fullName: profileData.full_name,
-        email: profileData.email,
+        fullName: profileData.full_name || 'Student',
+        email: profileData.email || '',
         campusId: profileData.campus_id || '',
         campusName: 'MSOT Campus',
         campusCode: 'MSOT',
@@ -156,6 +209,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setCurrentRole(roles[0] || 'student');
     } catch (err) {
       console.error('Failed to load profile:', err);
+      // Fallback on unexpected error if user is authenticated:
+      try {
+        const { data: authUserData } = await supabase.auth.getUser();
+        if (authUserData?.user) {
+          const authUser = authUserData.user;
+          const fallbackUser: UserProfile = {
+            id: userId,
+            fullName: authUser.user_metadata?.full_name || authUser.email?.split('@')[0] || 'Student',
+            email: authUser.email || '',
+            campusId: '',
+            campusName: 'MSOT Campus',
+            campusCode: 'MSOT',
+            roles: ['student'],
+            memberships: [],
+            createdAt: authUser.created_at || new Date().toISOString(),
+          };
+          setUser(fallbackUser);
+          setCurrentRole('student');
+          return;
+        }
+      } catch {
+        // Fallback failed
+      }
       setUser(null);
     } finally {
       setIsLoading(false);
@@ -244,11 +320,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { error: null };
     }
 
-    const { error } = await supabase.auth.signInWithPassword({
+    setIsLoading(true);
+
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password: pass,
     });
-    return { error };
+
+    if (error) {
+      setIsLoading(false);
+      return { error };
+    }
+
+    if (data?.user) {
+      await fetchLiveProfile(data.user.id);
+    } else {
+      setIsLoading(false);
+    }
+
+    return { error: null };
   };
 
   const signUp = async (
