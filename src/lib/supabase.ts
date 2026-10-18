@@ -66,14 +66,32 @@ export interface SupabaseConfigStatus {
   missingMessage: string | null;
 }
 
+/**
+ * Demo mode is permitted ONLY in development when Supabase credentials are missing.
+ * Production builds are NEVER allowed to run in demo mode.
+ */
+export function isDemoModeAllowed(): boolean {
+  return !import.meta.env.PROD && !isSupabaseConfigured();
+}
+
 export function getSupabaseConfigStatus(): SupabaseConfigStatus {
   const configured = isSupabaseConfigured();
+  let missingMessage: string | null = null;
+
+  if (!configured) {
+    if (import.meta.env.PROD) {
+      missingMessage =
+        'FATAL CONFIGURATION ERROR: Supabase credentials are missing in production. Live backend connection is strictly required. Demo mode is disabled in production builds.';
+    } else {
+      missingMessage =
+        'Supabase credentials are not yet configured in .env.local. The application is running in Development / Demo Mode with seeded mock data. To connect a live Supabase backend, set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY.';
+    }
+  }
+
   return {
     configured,
     url: configured ? supabaseUrl! : null,
     hasKey: !!supabasePublishableKey && !supabasePublishableKey.includes('your_supabase'),
-    missingMessage: configured
-      ? null
-      : 'Supabase credentials are not yet configured in .env.local. The application is running in Development / Demo Mode with seeded mock data. To connect a live Supabase backend, set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY.',
+    missingMessage,
   };
 }

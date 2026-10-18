@@ -67,11 +67,12 @@ export function hasClubPermission(
     return true;
   }
 
-  // Find membership for this specific club
+  // Find active coordinator membership for this specific club
   const membership = user.memberships.find(
-    (m) => m.clubId === clubId && m.status === 'active'
+    (m) => m.clubId === clubId && m.status === 'active' && m.role === 'coordinator'
   );
 
+  // If coordinator is inactive, resigned, or removed, ALL delegated powers are denied!
   if (!membership) return false;
 
   // Check delegated permissions

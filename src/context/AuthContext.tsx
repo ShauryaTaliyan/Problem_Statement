@@ -4,7 +4,7 @@
 
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { UserProfile, UserRole } from '../types/auth';
-import { supabase, isSupabaseConfigured, getSupabaseConfigStatus } from '../lib/supabase';
+import { supabase, isSupabaseConfigured, isDemoModeAllowed, getSupabaseConfigStatus } from '../lib/supabase';
 import { DEMO_PROFILES } from '../lib/demoData';
 
 interface AuthContextType {
@@ -25,7 +25,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [currentRole, setCurrentRole] = useState<UserRole>('student');
-  const [isDemoMode, setIsDemoMode] = useState<boolean>(!isSupabaseConfigured());
+  const [isDemoMode, setIsDemoMode] = useState<boolean>(isDemoModeAllowed());
 
   const status = getSupabaseConfigStatus();
 
@@ -154,7 +154,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     if (!isSupabaseConfigured()) {
-      // Development Demo Mode
+      if (import.meta.env.PROD) {
+        // In production build, do NOT permit demo mode or dummy logins!
+        setIsDemoMode(false);
+        setUser(null);
+        setIsLoading(false);
+        return;
+      }
+
+      // Development only: Demo Mode
       setIsDemoMode(true);
       const savedRole = (localStorage.getItem('msot_demo_role') as UserRole) || 'student';
       const initialProfile = DEMO_PROFILES[savedRole] || DEMO_PROFILES.student;
@@ -193,6 +201,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Demo Mode Persona Switcher
   const switchDemoRole = useCallback((role: UserRole) => {
+    // Security check: Disallow demo switching if live Supabase is configured or running in production
+    if (isSupabaseConfigured() || import.meta.env.PROD) {
+      console.warn('Unauthorized attempt: Demo role switching is strictly disabled in production or live Supabase mode.');
+      return;
+    }
     localStorage.setItem('msot_demo_role', role);
     setCurrentRole(role);
     const profile = DEMO_PROFILES[role] || DEMO_PROFILES.student;
@@ -201,7 +214,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signIn = async (email: string, pass: string): Promise<{ error: Error | null }> => {
     if (!isSupabaseConfigured()) {
-      // In demo mode, sign in switches to relevant role based on email or defaults to student
+      if (import.meta.env.PROD) {
+        return {
+          error: new Error(
+            'Authentication service is not configured. Live Supabase credentials are required in production.'
+          ),
+        };
+      }
+
+      // In development demo mode only:
       const matched = Object.values(DEMO_PROFILES).find((p) => p.email === email);
       if (matched) {
         setUser(matched);

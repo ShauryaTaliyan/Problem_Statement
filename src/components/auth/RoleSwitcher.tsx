@@ -13,7 +13,7 @@ export const RoleSwitcher: React.FC = () => {
   const { user, isDemoMode, currentRole, switchDemoRole } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
 
-  if (!isDemoMode) {
+  if (!isDemoMode || import.meta.env.PROD) {
     return null;
   }
 
