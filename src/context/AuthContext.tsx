@@ -1,0 +1,255 @@
+// ============================================================================
+// MSOT Clubs — Auth Context & Session Management
+// ============================================================================
+
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import { UserProfile, UserRole } from '../types/auth';
+import { supabase, isSupabaseConfigured, getSupabaseConfigStatus } from '../lib/supabase';
+import { DEMO_PROFILES } from '../lib/demoData';
+
+interface AuthContextType {
+  user: UserProfile | null;
+  isLoading: boolean;
+  isConfigured: boolean;
+  isDemoMode: boolean;
+  currentRole: UserRole;
+  configMessage: string | null;
+  switchDemoRole: (role: UserRole) => void;
+  signIn: (email: string, pass: string) => Promise<{ error: Error | null }>;
+  signOut: () => Promise<void>;
+}
+
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [currentRole, setCurrentRole] = useState<UserRole>('student');
+  const [isDemoMode, setIsDemoMode] = useState<boolean>(!isSupabaseConfigured());
+
+  const status = getSupabaseConfigStatus();
+
+  // Load user profile from Supabase if live credentials exist
+  const fetchLiveProfile = useCallback(async (userId: string) => {
+    try {
+      // 1. Fetch Profile
+      const { data, error: profileErr } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      const profileData = data as unknown as import('../types/database').Database['public']['Tables']['profiles']['Row'] | null;
+
+      if (profileErr || !profileData) {
+        console.error('Error fetching profile:', profileErr);
+        setUser(null);
+        return;
+      }
+
+      // 2. Fetch User Roles
+      const { data: rawRoles } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', userId);
+
+      const rolesData = rawRoles as unknown as { role: UserRole }[] | null;
+      const roles = (rolesData?.map((r) => r.role) || ['student']);
+
+      // 3. Fetch Club Memberships & Delegations
+      const { data: rawMembers } = await supabase
+        .from('club_memberships')
+        .select(`
+          club_id,
+          role,
+          status,
+          clubs ( id, name, code )
+        `)
+        .eq('user_id', userId)
+        .eq('status', 'active');
+
+      const memberData = rawMembers as unknown as {
+        club_id: string;
+        role: string;
+        status: string;
+        clubs: { id: string; name: string; code: string } | null;
+      }[] | null;
+
+      const { data: rawPres } = await supabase
+        .from('club_presidencies')
+        .select('club_id')
+        .eq('user_id', userId)
+        .eq('status', 'active');
+
+      const presData = rawPres as unknown as { club_id: string }[] | null;
+      const activePresClubIds = new Set(presData?.map((p) => p.club_id) || []);
+
+      const { data: rawDeleg } = await supabase
+        .from('club_permission_delegations')
+        .select('club_id, permission')
+        .eq('recipient_id', userId)
+        .eq('is_revoked', false);
+
+      const delegData = rawDeleg as unknown as { club_id: string; permission: string }[] | null;
+
+      const memberships = (memberData || []).map((m) => {
+        const club = m.clubs;
+        const clubId = m.club_id;
+        const isPres = activePresClubIds.has(clubId);
+        const delegated = (delegData || [])
+          .filter((d) => d.club_id === clubId)
+          .map((d) => d.permission as unknown as import('../types/auth').ClubPermission);
+
+        return {
+          clubId,
+          clubName: club?.name || 'Club',
+          clubCode: club?.code || 'CLUB',
+          role: 'coordinator' as const,
+          isPresident: isPres,
+          status: 'active' as const,
+          delegatedPermissions: isPres
+            ? [
+                'review_applications',
+                'manage_club_profile',
+                'create_activity_plan',
+                'submit_activity_plan',
+                'run_checkin',
+                'correct_attendance',
+                'manage_submissions',
+                'evaluate_submissions',
+                'manage_events',
+                'view_reports',
+                'issue_certificates',
+              ] as import('../types/auth').ClubPermission[]
+            : delegated,
+        };
+      });
+
+      const loadedUser: UserProfile = {
+        id: profileData.id,
+        studentId: profileData.student_id || undefined,
+        fullName: profileData.full_name,
+        email: profileData.email,
+        campusId: profileData.campus_id || '',
+        campusName: 'MSOT Campus',
+        campusCode: 'MSOT',
+        year: profileData.year || undefined,
+        section: profileData.section || undefined,
+        phone: profileData.phone || undefined,
+        avatarUrl: profileData.avatar_url || undefined,
+        roles,
+        memberships,
+        createdAt: profileData.created_at,
+      };
+
+      setUser(loadedUser);
+      setCurrentRole(roles[0] || 'student');
+    } catch (err) {
+      console.error('Failed to load profile:', err);
+      setUser(null);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured()) {
+      // Development Demo Mode
+      setIsDemoMode(true);
+      const savedRole = (localStorage.getItem('msot_demo_role') as UserRole) || 'student';
+      const initialProfile = DEMO_PROFILES[savedRole] || DEMO_PROFILES.student;
+      setUser(initialProfile);
+      setCurrentRole(savedRole);
+      setIsLoading(false);
+      return;
+    }
+
+    // Live Supabase Auth Flow
+    setIsDemoMode(false);
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        fetchLiveProfile(session.user.id);
+      } else {
+        setUser(null);
+        setIsLoading(false);
+      }
+    });
+
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        if (session?.user) {
+          fetchLiveProfile(session.user.id);
+        } else {
+          setUser(null);
+          setIsLoading(false);
+        }
+      }
+    );
+
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
+  }, [fetchLiveProfile]);
+
+  // Demo Mode Persona Switcher
+  const switchDemoRole = useCallback((role: UserRole) => {
+    localStorage.setItem('msot_demo_role', role);
+    setCurrentRole(role);
+    const profile = DEMO_PROFILES[role] || DEMO_PROFILES.student;
+    setUser(profile);
+  }, []);
+
+  const signIn = async (email: string, pass: string): Promise<{ error: Error | null }> => {
+    if (!isSupabaseConfigured()) {
+      // In demo mode, sign in switches to relevant role based on email or defaults to student
+      const matched = Object.values(DEMO_PROFILES).find((p) => p.email === email);
+      if (matched) {
+        setUser(matched);
+        setCurrentRole(matched.roles[0]);
+        return { error: null };
+      }
+      setUser(DEMO_PROFILES.student);
+      setCurrentRole('student');
+      return { error: null };
+    }
+
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password: pass,
+    });
+    return { error };
+  };
+
+  const signOut = async () => {
+    if (isSupabaseConfigured()) {
+      await supabase.auth.signOut();
+    }
+    setUser(null);
+  };
+
+  return (
+    <AuthContext.Provider
+      value={{
+        user,
+        isLoading,
+        isConfigured: status.configured,
+        isDemoMode,
+        currentRole,
+        configMessage: status.missingMessage,
+        switchDemoRole,
+        signIn,
+        signOut,
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+export const useAuth = (): AuthContextType => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+};

@@ -1,0 +1,16 @@
+{
+  "short_name": "MSOT Clubs",
+  "name": "MSOT Clubs — Club Activities Tracker",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "type": "image/svg+xml",
+      "sizes": "192x192 512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#0A192F",
+  "theme_color": "#0A192F",
+  "display": "standalone",
+  "orientation": "portrait-primary"
+}

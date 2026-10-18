@@ -1,0 +1,182 @@
+/* ============================================================================
+   MSOT Clubs — Global CSS Design Tokens & Light Glassmorphism Architecture
+   Colors: Navy, Blue, Cyan, Teal, White ONLY.
+   ============================================================================ */
+
+:root {
+  /* Navy & Dark Blue */
+  --color-navy-950: #060D1A;
+  --color-navy-900: #0A192F;
+  --color-navy-800: #112240;
+  --color-navy-700: #1B315B;
+  --color-navy-600: #233F77;
+
+  /* Blue */
+  --color-blue-700: #1D4ED8;
+  --color-blue-600: #2563EB;
+  --color-blue-500: #3B82F6;
+  --color-blue-400: #60A5FA;
+  --color-blue-300: #93C5FD;
+  --color-blue-100: #DBEAFE;
+  --color-blue-50: #EFF6FF;
+
+  /* Cyan */
+  --color-cyan-700: #0E7490;
+  --color-cyan-600: #0891B2;
+  --color-cyan-500: #06B6D4;
+  --color-cyan-400: #22D3EE;
+  --color-cyan-300: #67E8F9;
+  --color-cyan-100: #CFFAFE;
+  --color-cyan-50: #ECFEFF;
+
+  /* Teal */
+  --color-teal-700: #0F766E;
+  --color-teal-600: #0D9488;
+  --color-teal-500: #14B8A6;
+  --color-teal-400: #2DD4BF;
+  --color-teal-100: #CCFBF1;
+  --color-teal-50: #F0FDFA;
+
+  /* Pale Blue Canvas & Glass Surfaces */
+  --bg-canvas: #F4F8FC;
+  --bg-canvas-subtle: #EBF3FA;
+  --bg-glass-card: rgba(255, 255, 255, 0.78);
+  --bg-glass-card-hover: rgba(255, 255, 255, 0.92);
+  --bg-glass-nav: rgba(255, 255, 255, 0.88);
+  --bg-glass-modal: rgba(255, 255, 255, 0.95);
+
+  /* Glass Borders & Outlines */
+  --border-glass-light: rgba(147, 197, 253, 0.40);
+  --border-glass-subtle: rgba(224, 242, 254, 0.70);
+  --border-glass-cyan: rgba(6, 182, 212, 0.35);
+  --border-glass-glow: rgba(37, 99, 235, 0.45);
+
+  /* Text Colors */
+  --text-navy-primary: #0A192F;
+  --text-navy-secondary: #1B315B;
+  --text-navy-muted: #475569;
+  --text-white: #FFFFFF;
+
+  /* Glass Shadows & 3D Depth */
+  --shadow-glass-sm: 0 2px 8px -2px rgba(10, 25, 47, 0.05), 0 1px 4px -1px rgba(10, 25, 47, 0.03);
+  --shadow-glass-md: 0 10px 25px -4px rgba(10, 25, 47, 0.08), 0 2px 10px -2px rgba(10, 25, 47, 0.04);
+  --shadow-glass-lg: 0 20px 40px -8px rgba(10, 25, 47, 0.12), 0 6px 16px -3px rgba(6, 182, 212, 0.08);
+  --shadow-3d-elevated: 0 16px 32px -4px rgba(10, 25, 47, 0.14), 0 4px 12px -2px rgba(6, 182, 212, 0.18), inset 0 1px 1px rgba(255, 255, 255, 0.9);
+
+  /* Blur radii */
+  --backdrop-blur: blur(14px);
+  --backdrop-blur-sm: blur(8px);
+
+  /* Border Radii */
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-full: 9999px;
+
+  /* Typography */
+  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+/* Light Glassmorphism Card Utility */
+.glass-panel {
+  background: var(--bg-glass-card);
+  backdrop-filter: var(--backdrop-blur);
+  -webkit-backdrop-filter: var(--backdrop-blur);
+  border: 1px solid var(--border-glass-light);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-glass-md);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.glass-panel:hover {
+  background: var(--bg-glass-card-hover);
+  border-color: var(--border-glass-cyan);
+  box-shadow: var(--shadow-glass-lg);
+}
+
+.glass-panel-3d {
+  background: var(--bg-glass-card);
+  backdrop-filter: var(--backdrop-blur);
+  -webkit-backdrop-filter: var(--backdrop-blur);
+  border: 1px solid var(--border-glass-light);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-3d-elevated);
+  transform: translateY(-2px);
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.glass-panel-3d:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 24px 44px -8px rgba(10, 25, 47, 0.18), 0 8px 18px -4px rgba(6, 182, 212, 0.25);
+}
+
+/* Gradient Primary Button */
+.btn-primary-gradient {
+  background: linear-gradient(135deg, var(--color-blue-700) 0%, var(--color-cyan-600) 100%);
+  color: var(--text-white);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 4px 14px 0 rgba(6, 182, 212, 0.35);
+  font-weight: 600;
+  border-radius: var(--radius-md);
+  padding: 0.625rem 1.25rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.btn-primary-gradient:hover {
+  background: linear-gradient(135deg, var(--color-blue-600) 0%, var(--color-cyan-500) 100%);
+  box-shadow: 0 6px 20px 0 rgba(6, 182, 212, 0.5);
+  transform: translateY(-1px);
+}
+
+.btn-secondary-glass {
+  background: rgba(255, 255, 255, 0.8);
+  color: var(--text-navy-primary);
+  border: 1px solid var(--border-glass-light);
+  font-weight: 600;
+  border-radius: var(--radius-md);
+  padding: 0.625rem 1.25rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.btn-secondary-glass:hover {
+  background: #FFFFFF;
+  border-color: var(--color-cyan-500);
+  box-shadow: var(--shadow-glass-sm);
+}
+
+/* High contrast operational card for forms and tables */
+.operational-card {
+  background: #FFFFFF;
+  border: 1px solid var(--border-glass-light);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-glass-sm);
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(240, 248, 255, 0.5);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-blue-300);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-blue-500);
+}
